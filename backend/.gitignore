@@ -1,0 +1,14 @@
+# node
+**/node_modules/
+
+# env dosyaları
+**/.env
+
+# build çıktıları
+**/dist/
+**/build/
+
+# log vs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
