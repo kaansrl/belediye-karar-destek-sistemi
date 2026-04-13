@@ -18,6 +18,7 @@ useEffect(() => {
   const [clicked, setClicked] = useState({ lat: 38.33, lon: 38.30 });
   const [tur, setTur] = useState("okul");
   const [radius, setRadius] = useState(5000);
+  const [altTur, setAltTur] = useState("");
 const [saving, setSaving] = useState(false);
 const [lastSavedId, setLastSavedId] = useState(null);
 
@@ -33,22 +34,61 @@ const [lastSavedId, setLastSavedId] = useState(null);
   const fetchScenarios = scenariosUI.fetchScenarios;
 
   // ✅ GeoJSON fetch: mapMode/tur değişince renk kaynağı değişsin
-  useEffect(() => {
+  // ✅ GeoJSON fetch: mapMode / tur / altTur değişince harita yeniden gelsin
+useEffect(() => {
+  const controller = new AbortController();
+
+   setGeojson(null);
+
   const url =
     mapMode === "tur"
-      ? `http://localhost:3001/api/mahalleler/geojson?mode=tur&tur=${encodeURIComponent(tur)}`
-      : `http://localhost:3001/api/mahalleler/geojson`;
+      ? `http://127.0.0.1:3001/api/mahalleler/geojson?mode=tur&tur=${encodeURIComponent(tur)}&alt_tur=${encodeURIComponent(altTur || "")}`
+      : `http://127.0.0.1:3001/api/mahalleler/geojson`;
 
-  fetch(url, { cache: "no-store" })
-    .then((r) => r.json())
-    .then(setGeojson)
-    .catch((e) => console.error("GeoJSON fetch hata:", e));
-}, [mapMode, tur]);
+  fetch(url, {
+    cache: "no-store",
+    signal: controller.signal,
+  })
+    .then(async (r) => {
+      const text = await r.text();
+      let data = null;
+
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch (err) {
+        console.error("JSON parse hata:", err);
+      }
+
+      return data;
+    })
+    .then((data) => {
+      if (controller.signal.aborted) return;
+
+      if (data?.type === "FeatureCollection") {
+        setGeojson(data);
+      } else {
+        console.error("Geçersiz GeoJSON:", data);
+        setGeojson(null);
+      }
+    })
+    .catch((e) => {
+      if (e.name !== "AbortError") {
+        console.error("GeoJSON fetch hata:", e);
+      }
+    });
+
+  return () => controller.abort();
+}, [mapMode, tur, altTur]);
 
 
   const clearOneriler = useCallback(() => {
     setOneriler([]);
   }, []);
+
+  useEffect(() => {
+  sim.markInteracted();
+  clearOneriler();
+}, [altTur]);
 
   const sim = useSimulation({
   canSimulate,
@@ -60,6 +100,7 @@ const [lastSavedId, setLastSavedId] = useState(null);
   clicked,
   setClicked,
   clearOneriler,
+  altTur   
 });
 
   const runOneriler = useCallback(async () => {
@@ -69,11 +110,12 @@ const [lastSavedId, setLastSavedId] = useState(null);
     setOnerilerLoading(true);
 
     const payload = {
-      tur,
-      radius_m: radius,
-      aday_sayisi: Math.max(5, Math.min(100, Number(adaySayisi) || 25)),
-      top_n: Math.max(1, Math.min(20, Number(topN) || 5)),
-    };
+  tur,
+  radius_m: radius,
+  aday_sayisi: Math.max(5, Math.min(100, Number(adaySayisi) || 25)),
+  top_n: Math.max(1, Math.min(20, Number(topN) || 5)),
+  alt_tur: altTur || null,
+};
 
     const headers = { "Content-Type": "application/json" };
     if (authToken) headers.Authorization = `Bearer ${authToken}`;
@@ -92,12 +134,13 @@ const [lastSavedId, setLastSavedId] = useState(null);
   } finally {
     setOnerilerLoading(false);
   }
-}, [canSimulate, tur, radius, adaySayisi, topN, authToken]);
+}, [canSimulate, tur, radius, adaySayisi, topN, authToken, altTur]);
 
 const applyScenario = useCallback((s) => {
   setTur(String(s.tur));
   setMapMode(String(s.mode));
   setRadius(Number(s.radius_m));
+  setAltTur(s.alt_tur || "");
 
   const lat = Number(s.lat);
   const lon = Number(s.lon);
@@ -137,6 +180,7 @@ const saveScenario = useCallback(async () => {
       radius_m: Number(radius),
       tur: String(tur),
       mode: String(mapMode),
+      alt_tur: altTur || null,
 
       // backend'de JSONB: weights
       weights: sim.lastSim?.weights ?? null,
@@ -228,13 +272,15 @@ return (
 )}
       {canSimulate && (
         <ControlsBox
-          tur={tur}
-          setTur={setTur}
-          radius={radius}
-          setRadius={setRadius}
-          mapMode={mapMode}
-          setMapMode={setMapMode}
-        />
+  tur={tur}
+  setTur={setTur}
+  radius={radius}
+  setRadius={setRadius}
+  mapMode={mapMode}
+  setMapMode={setMapMode}
+  altTur={altTur}
+  setAltTur={setAltTur}
+/>
       )}
 
       {canSimulate && (
@@ -268,7 +314,7 @@ return (
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
 
         {geojson && (
-          <GeoJSON key={`${mapMode}-${tur}`} data={geojson} style={sim.styleFn} onEachFeature={sim.onEachFeature} />
+          <GeoJSON key={`${mapMode}-${tur}-${altTur || "none"}`} data={geojson} style={sim.styleFn} onEachFeature={sim.onEachFeature} />
         )}
 
         <Circle center={[clicked.lat, clicked.lon]} radius={radius} pathOptions={{ color: "#4aa3ff", weight: 2, fillOpacity: 0.08 }} />

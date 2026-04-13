@@ -295,7 +295,7 @@ const winnerCalc = useMemo(() => {
     const rows = compareResult?.leaderboard || [];
     const winner = rows.length ? rows[0] : null; // backend sıralıysa
     return {
-      winner,
+      winner,   
       metricLabel: "Toplam iyileşme",
       note: "En etkili senaryo Top10 toplam iyileşmeye göre seçilir.",
     };

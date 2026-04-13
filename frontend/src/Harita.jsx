@@ -42,6 +42,7 @@ export default function Harita({ onSimResult, authToken, role, mapMode, setMapMo
 
   const [tur, setTur] = useState("okul");
   const [radius, setRadius] = useState(5000);
+  const [altTur, setAltTur] = useState("");
 const [saving, setSaving] = useState(false);
 const [lastSavedId, setLastSavedId] = useState(null);
   // ✅ Harita skor modu
@@ -88,14 +89,14 @@ const [detailScenario, setDetailScenario] = useState(null);
   useEffect(() => {
   const url =
     mapMode === "tur"
-      ? `http://localhost:3001/api/mahalleler/geojson?mode=tur&tur=${encodeURIComponent(tur)}`
+      ? `http://localhost:3001/api/mahalleler/geojson?mode=tur&tur=${encodeURIComponent(tur)}&alt_tur=${encodeURIComponent(altTur || "")}`
       : `http://localhost:3001/api/mahalleler/geojson`;
 
   fetch(url, { cache: "no-store" })
     .then((r) => r.json())
     .then(setGeojson)
     .catch((e) => console.error("GeoJSON fetch hata:", e));
-}, [mapMode, tur]);
+}, [mapMode, tur, altTur]);
 
 
 
@@ -591,13 +592,15 @@ return (
 )}
       {canSimulate && (
         <ControlsBox
-          tur={tur}
-          setTur={setTur}
-          radius={radius}
-          setRadius={setRadius}
-          mapMode={mapMode}
-          setMapMode={setMapMode}
-        />
+  tur={tur}
+  setTur={setTur}
+  radius={radius}
+  setRadius={setRadius}
+  mapMode={mapMode}
+  setMapMode={setMapMode}
+  altTur={altTur}
+  setAltTur={setAltTur}
+/>
       )}
 
       {canSimulate && (

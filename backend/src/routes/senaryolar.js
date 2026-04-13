@@ -51,6 +51,7 @@ router.post("/", requireAuth, async (req, res) => {
     const radius_m = toInt(req.body?.radius_m);
     const tur = String(req.body?.tur ?? "").trim();
     const mode = String(req.body?.mode ?? "").trim();
+    const alt_tur = req.body?.alt_tur ? String(req.body.alt_tur).trim() : null;
 
     const weights = req.body?.weights ?? null; // JSONB
     const result_summary = req.body?.result_summary ?? null; // JSONB
@@ -62,16 +63,16 @@ router.post("/", requireAuth, async (req, res) => {
     if (!tur) return res.status(400).json({ error: "tur gerekli" });
     if (!mode) return res.status(400).json({ error: "mode gerekli" });
 
-    const r = await pool.query(
-      `
-      INSERT INTO senaryolar
-        (user_id, name, lon, lat, radius_m, tur, mode, weights, result_summary)
-      VALUES
-        ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb)
-      RETURNING id, user_id, name, lon, lat, radius_m, tur, mode, created_at
-      `,
-      [userId, name, lon, lat, radius_m, tur, mode, weights, result_summary]
-    );
+   const r = await pool.query(
+  `
+  INSERT INTO senaryolar
+    (user_id, name, lon, lat, radius_m, tur, mode, alt_tur, weights, result_summary)
+  VALUES
+    ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb)
+  RETURNING id, user_id, name, lon, lat, radius_m, tur, mode, alt_tur, created_at
+  `,
+  [userId, name, lon, lat, radius_m, tur, mode, alt_tur, weights, result_summary]
+);
 
     res.status(201).json({ scenario: r.rows[0] });
   } catch (e) {

@@ -12,6 +12,7 @@ export default function useSimulation({
   clicked,
   setClicked,
   clearOneriler,
+  altTur,
 }) {
   const [lastSim, setLastSim] = useState(null);
   const [mode, setMode] = useState("once");
@@ -33,13 +34,14 @@ export default function useSimulation({
       const reqId = ++simReqIdRef.current;
 
       const payload = {
-        lon: lng,
-        lat,
-        radius_m: radius,
-        tur,
-        mode: mapMode,
-        weights: weightsOverride ?? null,
-      };
+  lon: lng,
+  lat,
+  radius_m: radius,
+  tur,
+  mode: mapMode,
+  alt_tur: altTur || null,
+  weights: weightsOverride ?? null,
+};
 
       const headers = { "Content-Type": "application/json" };
       if (authToken) headers.Authorization = `Bearer ${authToken}`;
@@ -59,7 +61,7 @@ export default function useSimulation({
       onSimResult?.(data);
       setMode("after");
     },
-    [canSimulate, radius, tur, mapMode, authToken, onSimResult]
+    [canSimulate, radius, tur, mapMode, altTur, authToken, onSimResult]
   );
 
   // ✅ Harita click handler (artık runSim yukarıda olduğu için hata yok)
@@ -85,11 +87,14 @@ export default function useSimulation({
   }, [canSimulate, onSimResult]);
 
   // ✅ tur/mapMode değişince sim reset
-  useEffect(() => {
-    setMode("once");
-    setLastSim(null);
-    onSimResult?.(null);
-  }, [mapMode, tur, onSimResult]);
+ // ✅ tur / altTur / mapMode değişince sim reset
+useEffect(() => {
+  simReqIdRef.current += 1; // eski istekleri geçersiz yap
+  hasInteractedRef.current = false; // otomatik re-run'ı kes
+  setMode("once");
+  setLastSim(null);
+  onSimResult?.(null);
+}, [mapMode, tur, altTur, onSimResult]);
 
   // ✅ Radius/tur/mapMode değişince simülasyonu yeniden çalıştır (debounce)
   useEffect(() => {
@@ -107,7 +112,7 @@ export default function useSimulation({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [canSimulate, radius, tur, mapMode, clicked.lat, clicked.lon, runSim, clearOneriler]);
+  }, [canSimulate, radius, clicked.lat, clicked.lon, runSim, clearOneriler]);
 
   // ✅ mode=after iken sadece etkilenen mahalleleri "sonra skor" ile override
   const scoreOverride = useMemo(() => {
@@ -168,7 +173,6 @@ export default function useSimulation({
     lastSim,
     mode,
     setMode,
-
     runSim,
     markInteracted,
     handleMapClick,

@@ -91,7 +91,7 @@ export function ToggleBox({ mode, setMode }) {
   );
 }
 
-export function ControlsBox({ tur, setTur, radius, setRadius, mapMode, setMapMode }) {
+export function ControlsBox({ tur, setTur, radius, setRadius, mapMode, setMapMode, altTur, setAltTur }) {
   return (
     <div
       style={{
@@ -127,6 +127,58 @@ export function ControlsBox({ tur, setTur, radius, setRadius, mapMode, setMapMod
           <option value="saglik">Sağlık</option>
         </select>
       </div>
+
+{tur === "saglik" && (
+  <div style={{ marginBottom: 10 }}>
+    <div style={{ marginBottom: 6, opacity: 0.9 }}>Sağlık türü</div>
+    <select
+      value={altTur || ""}
+      onChange={(e) => setAltTur(e.target.value)}
+      style={{
+        width: "100%",
+        padding: "6px 8px",
+        borderRadius: 8,
+        border: "1px solid rgba(255,255,255,0.15)",
+        background: "rgba(255,255,255,0.10)",
+        color: "white",
+        outline: "none",
+      }}
+    >
+      <option value="">Seç</option>
+      <option value="hastane">Hastane</option>
+      <option value="eczane">Eczane</option>
+      <option value="saglik_ocagi">Sağlık Ocağı</option>
+      <option value="aile_sagligi_merkezi">ASM</option>
+    </select>
+  </div>
+)}
+
+{tur === "okul" && (
+  <div style={{ marginBottom: 10 }}>
+    <div style={{ marginBottom: 6, opacity: 0.9 }}>Okul türü</div>
+    <select
+      value={altTur || ""}
+      onChange={(e) => setAltTur(e.target.value)}
+      style={{
+        width: "100%",
+        padding: "6px 8px",
+        borderRadius: 8,
+        border: "1px solid rgba(255,255,255,0.15)",
+        background: "rgba(255,255,255,0.10)",
+        color: "white",
+        outline: "none",
+      }}
+    >
+      <option value="">Seç</option>
+      <option value="ilkokul">İlkokul</option>
+      <option value="ortaokul">Ortaokul</option>
+      <option value="lise">Lise</option>
+      <option value="universite">Üniversite</option>
+      <option value="ilkogretim_birlesik">İlköğretim (Birleşik)</option>
+      <option value="belirsiz">Belirsiz</option>
+    </select>
+  </div>
+)}
 
       <div style={{ marginBottom: 10 }}>
         <div style={{ marginBottom: 6, opacity: 0.9 }}>Harita modu</div>

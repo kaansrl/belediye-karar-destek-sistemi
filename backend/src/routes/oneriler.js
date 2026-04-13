@@ -15,7 +15,8 @@ const router = express.Router();
  */
 router.post("/", requireAuth, requireRole("admin", "analyst"), async (req, res) =>  {
   try {
-    const { tur, radius_m, aday_sayisi, top_n } = req.body ?? {};
+    const { tur, radius_m, aday_sayisi, top_n, alt_tur } = req.body ?? {};
+const hizmetAltTur = typeof alt_tur === "string" ? alt_tur.trim().toLowerCase() : null;
 
     const allowed = new Set(["okul", "park", "saglik"]);
     const t = typeof tur === "string" ? tur.trim().toLowerCase() : "okul";
@@ -67,72 +68,122 @@ router.post("/", requireAuth, requireRole("admin", "analyst"), async (req, res) 
         ),
 
         d AS (
-          SELECT
-            v.ad,
-            v.nufus,
-            v.nufus_yogunlugu_km2,
-            v.en_yakin_park_m,
-            v.en_yakin_okul_m,
-            v.en_yakin_saglik_m,
+  SELECT
+    x.ad,
+    x.nufus,
+    x.nufus_yogunlugu_km2,
+    x.en_yakin_park_m,
+    x.en_yakin_okul_m,
+    x.en_yakin_saglik_m,
 
-            CASE
-              WHEN $1 = 'okul'   THEN v.en_yakin_okul_m
-              WHEN $1 = 'park'   THEN v.en_yakin_park_m
-              WHEN $1 = 'saglik' THEN v.en_yakin_saglik_m
-              ELSE v.en_yakin_okul_m
-            END AS once_hizmet_m,
+    CASE
+      WHEN $1 = 'okul'   THEN x.en_yakin_okul_m
+      WHEN $1 = 'park'   THEN x.en_yakin_park_m
+      WHEN $1 = 'saglik' THEN x.en_yakin_saglik_m
+      ELSE x.en_yakin_okul_m
+    END AS once_hizmet_m,
 
-            ROUND(ST_Distance(ST_PointOnSurface(m.geom)::geography, p.geog)) AS yeni_hizmet_m,
+    x.yeni_hizmet_m,
 
-            CASE
-              WHEN $1 = 'okul'   THEN LEAST(v.en_yakin_okul_m,   ROUND(ST_Distance(ST_PointOnSurface(m.geom)::geography, p.geog))::numeric)
-              WHEN $1 = 'park'   THEN LEAST(v.en_yakin_park_m,   ROUND(ST_Distance(ST_PointOnSurface(m.geom)::geography, p.geog))::numeric)
-              WHEN $1 = 'saglik' THEN LEAST(v.en_yakin_saglik_m, ROUND(ST_Distance(ST_PointOnSurface(m.geom)::geography, p.geog))::numeric)
-              ELSE LEAST(v.en_yakin_okul_m, ROUND(ST_Distance(ST_PointOnSurface(m.geom)::geography, p.geog))::numeric)
-            END AS sonra_hizmet_m
+    CASE
+      WHEN $1 = 'okul' THEN
+        LEAST(x.en_yakin_okul_m, x.yeni_hizmet_m)
 
-          FROM mahalle_analiz_view v
-          JOIN mahalleler_clean m ON m.ad = v.ad
-          CROSS JOIN p
-          WHERE ST_DWithin(m.geom::geography, p.geog, $3)
-        ),
+      WHEN $1 = 'park' THEN
+        LEAST(x.en_yakin_park_m, x.yeni_hizmet_m)
 
-        skorlar AS (
-          SELECT
-            d.*,
+      WHEN $1 = 'saglik' THEN
+        LEAST(x.en_yakin_saglik_m, x.yeni_hizmet_m)
 
-            ROUND((
-              0.35 * ((d.nufus_yogunlugu_km2 - n.min_ny) / NULLIF((n.max_ny - n.min_ny), 0)) +
-              0.20 * ((d.en_yakin_park_m     - n.min_park) / NULLIF((n.max_park - n.min_park), 0)) +
-              0.25 * ((d.en_yakin_okul_m     - n.min_okul) / NULLIF((n.max_okul - n.min_okul), 0)) +
-              0.20 * ((d.en_yakin_saglik_m   - n.min_saglik) / NULLIF((n.max_saglik - n.min_saglik), 0))
-            )::numeric * 100, 2) AS skor_once,
+      ELSE
+        LEAST(x.en_yakin_okul_m, x.yeni_hizmet_m)
+    END AS sonra_hizmet_m
 
-            ROUND((
-              0.35 * ((d.nufus_yogunlugu_km2 - n.min_ny) / NULLIF((n.max_ny - n.min_ny), 0)) +
-              0.20 * (
-                CASE
-                  WHEN $1 = 'park' THEN ((d.sonra_hizmet_m - n.min_park) / NULLIF((n.max_park - n.min_park), 0))
-                  ELSE ((d.en_yakin_park_m   - n.min_park) / NULLIF((n.max_park - n.min_park), 0))
-                END
-              ) +
-              0.25 * (
-                CASE
-                  WHEN $1 = 'okul' THEN ((d.sonra_hizmet_m - n.min_okul) / NULLIF((n.max_okul - n.min_okul), 0))
-                  ELSE ((d.en_yakin_okul_m   - n.min_okul) / NULLIF((n.max_okul - n.min_okul), 0))
-                END
-              ) +
-              0.20 * (
-                CASE
-                  WHEN $1 = 'saglik' THEN ((d.sonra_hizmet_m - n.min_saglik) / NULLIF((n.max_saglik - n.min_saglik), 0))
-                  ELSE ((d.en_yakin_saglik_m - n.min_saglik) / NULLIF((n.max_saglik - n.min_saglik), 0))
-                END
-              )
-            )::numeric * 100, 2) AS skor_sonra
+  FROM (
+    SELECT
+      v.ad,
+      v.nufus,
+      v.nufus_yogunlugu_km2,
+      v.en_yakin_park_m,
 
-          FROM d
-          CROSS JOIN n
-        ),
+      CASE
+        WHEN $1 = 'okul' AND NULLIF($5, '') IS NOT NULL THEN (
+          SELECT MIN(
+            ST_Distance(
+              ST_PointOnSurface(m.geom)::geography,
+              h.geom::geography
+            )
+          )
+          FROM hizmet_noktalari h
+          WHERE h.tur = 'okul'
+            AND h.alt_tur = $5
+        )
+        ELSE v.en_yakin_okul_m
+      END AS en_yakin_okul_m,
+
+      CASE
+        WHEN $1 = 'saglik' AND NULLIF($5, '') IS NOT NULL THEN (
+          SELECT MIN(
+            ST_Distance(
+              ST_PointOnSurface(m.geom)::geography,
+              h.geom::geography
+            )
+          )
+          FROM hizmet_noktalari h
+          WHERE h.tur = 'saglik'
+            AND h.alt_tur = $5
+        )
+        ELSE v.en_yakin_saglik_m
+      END AS en_yakin_saglik_m,
+
+      ROUND(
+        ST_Distance(ST_PointOnSurface(m.geom)::geography, p.geog)
+      )::numeric AS yeni_hizmet_m
+
+    FROM mahalle_analiz_view v
+    JOIN mahalleler_clean m ON m.ad = v.ad
+    CROSS JOIN p
+    WHERE ST_DWithin(m.geom::geography, p.geog, $3)
+  ) x
+),
+
+skorlar AS (
+  SELECT
+    d.*,
+
+    ROUND((
+      0.35 * ((d.nufus_yogunlugu_km2 - n.min_ny) / NULLIF((n.max_ny - n.min_ny), 0)) +
+      0.20 * ((d.en_yakin_park_m     - n.min_park) / NULLIF((n.max_park - n.min_park), 0)) +
+      0.25 * ((d.en_yakin_okul_m     - n.min_okul) / NULLIF((n.max_okul - n.min_okul), 0)) +
+      0.20 * ((d.en_yakin_saglik_m   - n.min_saglik) / NULLIF((n.max_saglik - n.min_saglik), 0))
+    )::numeric * 100, 2) AS skor_once,
+
+    ROUND((
+      0.35 * ((d.nufus_yogunlugu_km2 - n.min_ny) / NULLIF((n.max_ny - n.min_ny), 0)) +
+      0.20 * (
+        CASE
+          WHEN $1 = 'park' THEN ((d.sonra_hizmet_m - n.min_park) / NULLIF((n.max_park - n.min_park), 0))
+          ELSE ((d.en_yakin_park_m   - n.min_park) / NULLIF((n.max_park - n.min_park), 0))
+        END
+      ) +
+      0.25 * (
+        CASE
+          WHEN $1 = 'okul' THEN ((d.sonra_hizmet_m - n.min_okul) / NULLIF((n.max_okul - n.min_okul), 0))
+          ELSE ((d.en_yakin_okul_m   - n.min_okul) / NULLIF((n.max_okul - n.min_okul), 0))
+        END
+      ) +
+      0.20 * (
+        CASE
+          WHEN $1 = 'saglik' THEN ((d.sonra_hizmet_m - n.min_saglik) / NULLIF((n.max_saglik - n.min_saglik), 0))
+          ELSE ((d.en_yakin_saglik_m - n.min_saglik) / NULLIF((n.max_saglik - n.min_saglik), 0))
+        END
+      )
+    )::numeric * 100, 2) AS skor_sonra
+
+  FROM d
+  CROSS JOIN n
+),
+
 
         fark AS (
           SELECT
@@ -176,7 +227,7 @@ router.post("/", requireAuth, requireRole("admin", "analyst"), async (req, res) 
       LIMIT $4;
     `;
 
-    const { rows } = await pool.query(sql, [hizmetTur, adaySayisi, radius, topN]);
+    const { rows } = await pool.query(sql, [hizmetTur, adaySayisi, radius, topN, hizmetAltTur]);
 
     res.json({
       input: { tur: hizmetTur, radius_m: radius, aday_sayisi: adaySayisi, top_n: topN },
